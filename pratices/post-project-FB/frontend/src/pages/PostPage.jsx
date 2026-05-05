@@ -12,7 +12,7 @@ const PostPage = () => {
   }, []);
 
   return (
-    <section className="bg-gray-900 w-[460px] overflow-auto">
+    <section className="bg-gray-900 w-115 overflow-auto">
       <div className="flex flex-col gap-2.5 px-3 py-3 ">
         {post.map((ele) => {
           return <PostCard data={ele} />;
