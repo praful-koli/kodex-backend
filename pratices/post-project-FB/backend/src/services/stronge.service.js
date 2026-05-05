@@ -2,7 +2,7 @@ const ImageKit = require("@imagekit/nodejs");
 const { toFile } = require("@imagekit/nodejs");
 
 const client = new ImageKit({
-  privateKey: "private_2pr6gkSySPMdEaqNQcs+wnjVw1s=",
+  privateKey: process.env.IMAGEKIT_URL  ,
 });
 
 const uploadImageKit = async (image) => {
@@ -13,5 +13,5 @@ const uploadImageKit = async (image) => {
   });
   return file.url;
 };
-
+process.env.IMAGEKIT_URL
 module.exports = uploadImageKit;
