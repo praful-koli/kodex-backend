@@ -4,14 +4,27 @@ import * as authController from "../controllers/auth.controller.js";
 
 const authRoute = express.Router();
 
+// register
 authRoute.post("/register", authController.registerController);
 
 
-authRoute.get('/get-me', authController.getMeController )
+// login 
 
-authRoute.get('/refresh-token' , authController.refreshTokenController)
+authRoute.post('/login' , authController.loginController)
+
+// get user
+authRoute.get("/get-me", authController.getMeController);
+
+//  refreshToken routaed
+authRoute.get("/refresh-token", authController.refreshTokenController);
 
 // logout
-authRoute.get('/logout' , authController.logoutController);
+authRoute.get("/logout", authController.logoutController);
+
+
+// logout-all
+
+
+authRoute.get('/logout-all', authController.logoutAllDeviceController)
 
 export default authRoute;

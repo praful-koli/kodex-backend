@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 import bycript from "bcrypt";
 import sessionModel from "../models/session.model.js";
+import crypto from "crypto";
+import { userInfo } from "os";
 
 export const registerController = async (req, res) => {
   const { username, email, password } = req.body;
@@ -31,7 +33,7 @@ export const registerController = async (req, res) => {
     password: hashPassword,
   });
 
-  let refreshToken = jwt.sign(
+  let newRefreshToken = jwt.sign(
     {
       userID: user._id,
     },
@@ -39,7 +41,10 @@ export const registerController = async (req, res) => {
     { expiresIn: "7d" },
   );
 
-  const refreshTokenHash = await bycript.hash(refreshToken, 10);
+  const refreshTokenHash = crypto
+    .createHash("sha256")
+    .update(newRefreshToken)
+    .digest("hex");
 
   const session = await sessionModel.create({
     user: user._id,
@@ -53,10 +58,10 @@ export const registerController = async (req, res) => {
       userID: user._id,
     },
     config.JWT_SECRET,
-    { expiresIn: "15m" },
+    { expiresIn: "10m" },
   );
 
-  res.cookie("refreshToken", refreshToken, {
+  res.cookie("refreshToken", newRefreshToken, {
     httpOnly: true,
     secure: true,
     sameSite: "strict",
@@ -68,6 +73,79 @@ export const registerController = async (req, res) => {
     user: {
       username: user.username,
       email: user.email,
+    },
+    accessToken,
+    newRefreshToken,
+  });
+};
+
+export const loginController = async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({
+      message: "All Feild Required",
+    });
+  }
+
+  const user = await userModel.findOne({ email });
+  console.log(user)
+  if (!user) {
+    return status(401).json({
+      message: "Invalid email or password",
+    });
+  }
+
+  // if (!user.verified) {
+  //   return res.status(401).json({
+  //     message: "Email not verified",
+  //   });
+  // }
+
+  const isPasswordValid = await bycript.compare(password, user.password);
+
+  if (!isPasswordValid) {
+    return res.status(401).json({
+      message: "Password Is Invalid",
+    });
+  }
+
+  const refreshToken = jwt.sign({ userID: user._id }, config.JWT_SECRET, {
+    expiresIn: "7d",
+  });
+
+  const accessToken = jwt.sign(
+    {
+      userID: user._id,
+    },
+    config.JWT_SECRET,
+    { expiresIn: "10m" },
+  );
+
+  const refreshTokenHash = crypto
+    .createHash("sha256")
+    .update(refreshToken)
+    .digest("hex");
+
+  await sessionModel.create({
+    user: user._id,
+    refreshTokenHash: refreshTokenHash,
+    ip: req.ip,
+    userAgent: req.headers["user-agent"],
+  });
+
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  res.status(200).json({
+    message: "Login Sucessfully",
+    user : {
+       username : user.username,
+       email : user.email
     },
     accessToken,
   });
@@ -108,58 +186,61 @@ export const getMeController = async (req, res) => {
 
 export const refreshTokenController = async (req, res) => {
   let refreshToken = req.cookies.refreshToken;
-
+   console.log(refreshToken)
   if (!refreshToken) {
     return res.status(401).json({
-      message: "anthorized access",
+      message: "Unauthrized access",
     });
   }
 
   const decode = jwt.verify(refreshToken, config.JWT_SECRET);
 
-
-  let refreshTokenHash = await bycript.hash(refreshToken , 10)
+  let refreshTokenHash = crypto
+    .createHash("sha256")
+    .update(refreshToken)
+    .digest("hex");
 
   let session = await sessionModel.findOne({
     refreshTokenHash: refreshTokenHash,
-    revoked : false
-  })
+    revoked: false,
+  });
 
-  if(!session) {
-     return res.status(401).json({
-       message : "Invalid Refresh Token"
-     })
+  if (!session) {
+    return res.status(401).json({
+      message: "Invalid Refresh Token",
+    });
   }
-
 
   const accessToken = jwt.sign(
     {
       userID: decode.userID,
     },
     config.JWT_SECRET,
-    { expiresIn: "15m" },
+    { expiresIn: "10m" },
   );
 
-  refreshToken = jwt.sign(
+  let newRefreshToken = jwt.sign(
     {
       userID: decode.userID,
     },
     config.JWT_SECRET,
     { expiresIn: "7d" },
   );
- let refreshTokenHash = await bycript.hash(refreshToken, 10)
- 
- session.refreshTokenHash = refreshTokenHash
- session.save()
 
-  res.cookie("refreshToken", refreshToken, {
+   refreshTokenHash = crypto
+    .createHash("sha256")
+    .update(newRefreshToken)
+    .digest("hex");
+
+  session.refreshTokenHash = refreshTokenHash;
+  session.save();
+
+  res.cookie("refreshToken", newRefreshToken, {
     httpOnly: true,
     secure: true,
     sameSite: "strict",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
-
-
 
   res.status(200).json({
     message: "New token created ",
@@ -176,12 +257,18 @@ export const logoutController = async (req, res) => {
     });
   }
 
-  let refreshTokenHash = await bycript.hash(refreshToken, 10);
+  let refreshTokenHash = crypto
+    .createHash("sha256")
+    .update(refreshToken)
+    .digest("hex");
+
+ 
 
   let session = await sessionModel.findOne({
     refreshTokenHash: refreshTokenHash,
     revoked: false,
   });
+
 
   if (!session) {
     return res.status(400).json({
@@ -196,5 +283,33 @@ export const logoutController = async (req, res) => {
 
   res.status(200).json({
     message: "Logout successfully ...",
+  });
+};
+
+export const logoutAllDeviceController = async (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+    return res.status(400).json({
+      message: "Refresh Token Not Found",
+    });
+  }
+
+  const decode = jwt.verify(refreshToken, config.JWT_SECRET);
+
+  await sessionModel.updateMany(
+    {
+      user: decode.userID,
+      revoked: false,
+    },
+    {
+      revoked: true,
+    },
+  );
+
+  res.clearCookie("refreshToken");
+
+  res.status(200).json({
+    message: "Logout From All Device Successflly ",
   });
 };
