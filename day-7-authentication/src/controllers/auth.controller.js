@@ -2,8 +2,8 @@ import userModel from "../models/user.model.js";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 import bycript from "bcrypt";
+import sessionModel from "../models/session.model.js";
 
- 
 export const registerController = async (req, res) => {
   const { username, email, password } = req.body;
 
@@ -31,20 +31,29 @@ export const registerController = async (req, res) => {
     password: hashPassword,
   });
 
-  let accessToken = jwt.sign(
-    {
-      userID: user._id,
-    },
-    config.JWT_SECRET,
-    { expiresIn: "15m" },
-  );
-
   let refreshToken = jwt.sign(
     {
       userID: user._id,
     },
     config.JWT_SECRET,
     { expiresIn: "7d" },
+  );
+
+  const refreshTokenHash = await bycript.hash(refreshToken, 10);
+
+  const session = await sessionModel.create({
+    user: user._id,
+    refreshTokenHash: refreshTokenHash,
+    ip: req.ip,
+    userAgent: req.headers["user-agent"],
+  });
+
+  let accessToken = jwt.sign(
+    {
+      userID: user._id,
+    },
+    config.JWT_SECRET,
+    { expiresIn: "15m" },
   );
 
   res.cookie("refreshToken", refreshToken, {
@@ -64,7 +73,6 @@ export const registerController = async (req, res) => {
   });
 };
 
-
 export const getMeController = async (req, res) => {
   try {
     let token = req.headers.authorization?.split(" ")[1];
@@ -76,7 +84,6 @@ export const getMeController = async (req, res) => {
     }
 
     let decode = jwt.verify(token, config.JWT_SECRET);
-    
 
     const user = await userModel.findById(decode.userID);
 
@@ -91,8 +98,6 @@ export const getMeController = async (req, res) => {
       username: user.username,
       email: user.email,
     });
-
-    
   } catch (error) {
     return res.status(500).json({
       message: "Internal Server Error",
@@ -101,10 +106,9 @@ export const getMeController = async (req, res) => {
   }
 };
 
-
 export const refreshTokenController = async (req, res) => {
   let refreshToken = req.cookies.refreshToken;
- 
+
   if (!refreshToken) {
     return res.status(401).json({
       message: "anthorized access",
@@ -112,6 +116,21 @@ export const refreshTokenController = async (req, res) => {
   }
 
   const decode = jwt.verify(refreshToken, config.JWT_SECRET);
+
+
+  let refreshTokenHash = await bycript.hash(refreshToken , 10)
+
+  let session = await sessionModel.findOne({
+    refreshTokenHash: refreshTokenHash,
+    revoked : false
+  })
+
+  if(!session) {
+     return res.status(401).json({
+       message : "Invalid Refresh Token"
+     })
+  }
+
 
   const accessToken = jwt.sign(
     {
@@ -121,26 +140,61 @@ export const refreshTokenController = async (req, res) => {
     { expiresIn: "15m" },
   );
 
-   refreshToken = jwt.sign(
+  refreshToken = jwt.sign(
     {
       userID: decode.userID,
     },
     config.JWT_SECRET,
     { expiresIn: "7d" },
   );
+ let refreshTokenHash = await bycript.hash(refreshToken, 10)
+ 
+ session.refreshTokenHash = refreshTokenHash
+ session.save()
 
-  res.cookie('refreshToken' ,refreshToken,{
-     httpOnly : true,
-     secure : true,
-     sameSite : "strict",
-     maxAge : 7 * 24 * 60 * 60 * 1000
-  })
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+
 
   res.status(200).json({
-     message : 'New token created ',
-     accessToken
-  })
-
+    message: "New token created ",
+    accessToken,
+  });
 };
- 
 
+export const logoutController = async (req, res) => {
+  let refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+    return res.status(400).json({
+      message: "Refresh Token Not Found",
+    });
+  }
+
+  let refreshTokenHash = await bycript.hash(refreshToken, 10);
+
+  let session = await sessionModel.findOne({
+    refreshTokenHash: refreshTokenHash,
+    revoked: false,
+  });
+
+  if (!session) {
+    return res.status(400).json({
+      message: "Refresh Token Invalid",
+    });
+  }
+
+  session.revoked = true;
+  session.save();
+
+  res.clearCookie("refreshToken");
+
+  res.status(200).json({
+    message: "Logout successfully ...",
+  });
+};

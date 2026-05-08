@@ -11,4 +11,7 @@ authRoute.get('/get-me', authController.getMeController )
 
 authRoute.get('/refresh-token' , authController.refreshTokenController)
 
+// logout
+authRoute.get('/logout' , authController.logoutController);
+
 export default authRoute;
