@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 import bycript from "bcrypt";
 
-
+ 
 export const registerController = async (req, res) => {
   const { username, email, password } = req.body;
 
@@ -76,6 +76,7 @@ export const getMeController = async (req, res) => {
     }
 
     let decode = jwt.verify(token, config.JWT_SECRET);
+    
 
     const user = await userModel.findById(decode.userID);
 
@@ -90,6 +91,8 @@ export const getMeController = async (req, res) => {
       username: user.username,
       email: user.email,
     });
+
+    
   } catch (error) {
     return res.status(500).json({
       message: "Internal Server Error",
@@ -123,7 +126,7 @@ export const refreshTokenController = async (req, res) => {
       userID: decode.userID,
     },
     config.JWT_SECRET,
-    { expiresIn: "15m" },
+    { expiresIn: "7d" },
   );
 
   res.cookie('refreshToken' ,refreshToken,{
@@ -139,3 +142,5 @@ export const refreshTokenController = async (req, res) => {
   })
 
 };
+ 
+
