@@ -33,6 +33,9 @@ export const registerController = async (req, res) => {
     password: hashPassword,
   });
 
+
+  
+
   let newRefreshToken = jwt.sign(
     {
       userID: user._id,
@@ -75,7 +78,7 @@ export const registerController = async (req, res) => {
       email: user.email,
     },
     accessToken,
-    newRefreshToken,
+    
   });
 };
 
@@ -313,3 +316,5 @@ export const logoutAllDeviceController = async (req, res) => {
     message: "Logout From All Device Successflly ",
   });
 };
+
+

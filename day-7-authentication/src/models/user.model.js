@@ -16,8 +16,11 @@ const userSchema = new mongoose.Schema({
     required: [true, "password Reuired"],
     unique: [true, " unique password"],
   },
+  verified: {
+    type: Boolean,
+    default: false
+  }
 });
-
 
 const userModel = mongoose.model('users', userSchema)
 
